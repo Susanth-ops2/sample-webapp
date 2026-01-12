@@ -4,6 +4,6 @@
                              http://xmlns.jcp.org/xml/ns/javaee/web-app_4_0.xsd"
          version="4.0">
 
-    <display-name>Sample WebApp for the test </display-name>
+    <display-name>Sample WebApp for the testt </display-name>
 <!--test-->
 </web-app>
