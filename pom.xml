@@ -3,6 +3,9 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
                              http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
+    <!-- ========================= -->
+    <!-- Project Basics -->
+    <!-- ========================= -->
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.example</groupId>
@@ -12,7 +15,20 @@
 
     <name>Sample Web Application</name>
 
+    <!-- ========================= -->
+    <!-- Properties (Java Version) -->
+    <!-- ========================= -->
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
+    </properties>
+
+    <!-- ========================= -->
+    <!-- Dependencies -->
+    <!-- ========================= -->
     <dependencies>
+        <!-- Servlet API (provided by Tomcat) -->
         <dependency>
             <groupId>javax.servlet</groupId>
             <artifactId>javax.servlet-api</artifactId>
@@ -21,22 +37,27 @@
         </dependency>
     </dependencies>
 
-    <properties>
-        <maven.compiler.source>1.8</maven.compiler.source>
-        <maven.compiler.target>1.8</maven.compiler.target>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    </properties>
-
+    <!-- ========================= -->
+    <!-- Build Configuration -->
+    <!-- ========================= -->
     <build>
         <finalName>sample-webapp</finalName>
+
         <plugins>
+            <!-- Compiler Plugin (uses Java 8 from properties) -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
+            </plugin>
+
+            <!-- WAR Plugin -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-war-plugin</artifactId>
+                <version>3.4.0</version>
                 <configuration>
-                    <source>11</source>
-                    <target>11</target>
+                    <failOnMissingWebXml>false</failOnMissingWebXml>
                 </configuration>
             </plugin>
         </plugins>
