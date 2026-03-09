@@ -46,48 +46,30 @@ jobs:
           name: sample-webapp-war
           path: target/
 
-      - name: Debug - find all Python and Ansible paths
-        run: |
-          echo "=== which python3 ==="
-          which python3
-          python3 --version
+      - name: Setup Python 3.11 and install pywinrm
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-          echo "=== which ansible ==="
-          which ansible
+      - name: Install Ansible and pywinrm into same Python
+        run: |
+          # Use the python from setup-python action
+          python --version
+          which python
+          which pip
+
+          # Install ansible and pywinrm into SAME python environment
+          pip install ansible
+          pip install pywinrm
+          pip install requests-ntlm
+          pip install requests-credssp
+
+          # Verify both in same environment
+          python -c "import winrm; print('winrm OK')"
           ansible --version
+          echo "Ansible python: $(ansible --version | grep python)"
 
-          echo "=== Ansible python path ==="
-          ansible --version | grep "python"
-
-          echo "=== All python3 binaries ==="
-          find /usr -name "python3*" -type f 2>/dev/null
-
-          echo "=== Try import winrm ==="
-          python3 -c "import winrm; print('OK')" || echo "FAIL - not found in python3"
-
-          echo "=== python3.12 path ==="
-          ls /usr/bin/python3* 2>/dev/null
-
-      - name: Install pywinrm all methods
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y ansible python3-winrm python3-requests-ntlm
-
-          echo "=== after apt install ==="
-          python3 -c "import winrm; print('apt install OK')" || echo "STILL FAIL"
-
-          echo "=== Ansible python executable ==="
-          ANSIBLE_PY=$(ansible --version | grep "python executable" | awk '{print $NF}')
-          echo "Ansible uses: $ANSIBLE_PY"
-
-          echo "=== install into ansible python ==="
-          sudo $ANSIBLE_PY -m pip install pywinrm --break-system-packages 2>/dev/null || true
-          sudo $ANSIBLE_PY -m pip install requests-ntlm --break-system-packages 2>/dev/null || true
-
-          echo "=== verify with ansible python ==="
-          $ANSIBLE_PY -c "import winrm; print('ANSIBLE PYTHON OK')" || echo "STILL FAIL"
-
-      - name: Overwrite ansible.cfg with no transport
+      - name: Overwrite ansible.cfg
         run: |
           cat > ansible/ansible.cfg << 'EOF'
           [defaults]
@@ -95,7 +77,6 @@ jobs:
           retry_files_enabled = False
           roles_path          = roles
           EOF
-          cat ansible/ansible.cfg
 
       - name: Create inventory
         env:
@@ -103,8 +84,8 @@ jobs:
           WINDOWS_USER: ${{ secrets.WINDOWS_USER }}
           WINDOWS_PASSWORD: ${{ secrets.WINDOWS_PASSWORD }}
         run: |
-          ANSIBLE_PY=$(ansible --version | grep "python executable" | awk '{print $NF}')
-          echo "Setting ansible_python_interpreter to: $ANSIBLE_PY"
+          PYTHON_PATH=$(which python)
+          echo "Python path: $PYTHON_PATH"
 
           cat > ansible/inventory-local.ini << EOF
           [windows_servers]
@@ -118,7 +99,7 @@ jobs:
           ansible_winrm_port=5985
           ansible_winrm_scheme=http
           ansible_winrm_server_cert_validation=ignore
-          ansible_python_interpreter=${ANSIBLE_PY}
+          ansible_python_interpreter=${PYTHON_PATH}
           EOF
 
           echo "--- inventory (password hidden) ---"
