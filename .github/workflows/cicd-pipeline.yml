@@ -1,7 +1,7 @@
 # ============================================================
 # .github/workflows/cicd-pipeline.yml
 # PHASE 1 - LOCALHOST ONLY
-# Fix: install pywinrm into exact Python Ansible uses
+# Fix: use pip install via apt + fixed ansible.cfg
 # ============================================================
 
 name: CI/CD Pipeline - Localhost Only (Phase 1)
@@ -58,32 +58,34 @@ jobs:
           name: sample-webapp-war
           path: target/
 
-      - name: Install Ansible and pywinrm (FIXED)
+      - name: Install Ansible and pywinrm
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y ansible python3-pip python3-dev
+          # Install everything via apt - most reliable on Ubuntu runner
+          sudo apt-get install -y \
+            ansible \
+            python3-pip \
+            python3-dev \
+            python3-winrm \
+            python3-requests-ntlm \
+            python3-requests
 
-          # Find exact Python that Ansible uses
-          ANSIBLE_PYTHON=$(ansible --version | grep "python version" | awk '{print $4}' | cut -d'.' -f1,2)
-          echo "Ansible Python version: $ANSIBLE_PYTHON"
+          # Confirm winrm is found by system python
+          python3 -c "import winrm; print('winrm OK')"
+          ansible --version
 
-          PYTHON_BIN=$(which python3)
-          echo "Python binary: $PYTHON_BIN"
-
-          # Install pywinrm into that exact Python
-          sudo $PYTHON_BIN -m pip install pywinrm --break-system-packages --ignore-installed
-          sudo $PYTHON_BIN -m pip install requests-ntlm --break-system-packages --ignore-installed
-          sudo $PYTHON_BIN -m pip install requests-credssp --break-system-packages --ignore-installed
-
-          # Verify
-          echo "--- Verifying pywinrm ---"
-          sudo $PYTHON_BIN -c "import winrm; print('pywinrm OK')"
-
-          # Also install via apt to be safe
-          sudo apt-get install -y python3-winrm
-
-          # Final verify
-          python3 -c "import winrm; print('winrm accessible')"
+      - name: Fix ansible.cfg - remove transport line
+        run: |
+          cat > ansible/ansible.cfg << EOF
+          [defaults]
+          inventory           = inventory.ini
+          host_key_checking   = False
+          retry_files_enabled = False
+          stdout_callback     = yaml
+          roles_path          = roles
+          EOF
+          echo "ansible.cfg updated:"
+          cat ansible/ansible.cfg
 
       - name: Create inventory for localhost
         env:
@@ -91,10 +93,6 @@ jobs:
           WINDOWS_USER: ${{ secrets.WINDOWS_USER }}
           WINDOWS_PASSWORD: ${{ secrets.WINDOWS_PASSWORD }}
         run: |
-          # Get exact python3 path
-          PYTHON_PATH=$(which python3)
-          echo "Using Python: $PYTHON_PATH"
-
           cat > ansible/inventory-local.ini << EOF
           [windows_servers]
           your-pc ansible_host=${YOUR_PC_IP}
@@ -107,9 +105,8 @@ jobs:
           ansible_winrm_port=5985
           ansible_winrm_scheme=http
           ansible_winrm_server_cert_validation=ignore
-          ansible_python_interpreter=${PYTHON_PATH}
+          ansible_python_interpreter=/usr/bin/python3
           EOF
-
           echo "--- Inventory (password hidden) ---"
           grep -v password ansible/inventory-local.ini
 
@@ -150,8 +147,3 @@ jobs:
           echo "  Build           : ${{ needs.build.result }}"
           echo "  Deploy Localhost: ${{ needs.deploy-localhost.result }}"
           echo "========================================"
-          if [ "${{ needs.deploy-localhost.result }}" == "success" ]; then
-            echo "SUCCESS - App deployed to your Windows PC!"
-          else
-            echo "FAILED - Check logs above"
-          fi
