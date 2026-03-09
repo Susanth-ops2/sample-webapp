@@ -1,11 +1,7 @@
 # ============================================================
 # .github/workflows/cicd-pipeline.yml
 # PHASE 1 - LOCALHOST ONLY
-#
-# GitHub Secrets needed:
-#   YOUR_PC_IP       → 172.30.28.8
-#   WINDOWS_USER     → AGRC
-#   WINDOWS_PASSWORD → your Windows login password
+# Fix: install pywinrm into exact Python Ansible uses
 # ============================================================
 
 name: CI/CD Pipeline - Localhost Only (Phase 1)
@@ -46,7 +42,7 @@ jobs:
           path: target/sample-webapp.war
           retention-days: 5
 
-  # ── Job 2: Deploy to YOUR Windows PC (localhost) ──────────
+  # ── Job 2: Deploy to YOUR Windows PC ──────────────────────
   deploy-localhost:
     name: Deploy to Localhost
     runs-on: ubuntu-latest
@@ -62,18 +58,32 @@ jobs:
           name: sample-webapp-war
           path: target/
 
-      - name: Install Ansible and pywinrm (FIXED - system level)
+      - name: Install Ansible and pywinrm (FIXED)
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y ansible python3-pip python3-dev
 
-          # Install pywinrm at SYSTEM level so Ansible can find it
-          sudo pip3 install pywinrm --break-system-packages
-          sudo pip3 install requests-ntlm --break-system-packages
-          sudo pip3 install requests-credssp --break-system-packages
+          # Find exact Python that Ansible uses
+          ANSIBLE_PYTHON=$(ansible --version | grep "python version" | awk '{print $4}' | cut -d'.' -f1,2)
+          echo "Ansible Python version: $ANSIBLE_PYTHON"
 
-          # Verify pywinrm is available to system Python
-          sudo python3 -c "import winrm; print('pywinrm installed OK at system level')"
+          PYTHON_BIN=$(which python3)
+          echo "Python binary: $PYTHON_BIN"
+
+          # Install pywinrm into that exact Python
+          sudo $PYTHON_BIN -m pip install pywinrm --break-system-packages --ignore-installed
+          sudo $PYTHON_BIN -m pip install requests-ntlm --break-system-packages --ignore-installed
+          sudo $PYTHON_BIN -m pip install requests-credssp --break-system-packages --ignore-installed
+
+          # Verify
+          echo "--- Verifying pywinrm ---"
+          sudo $PYTHON_BIN -c "import winrm; print('pywinrm OK')"
+
+          # Also install via apt to be safe
+          sudo apt-get install -y python3-winrm
+
+          # Final verify
+          python3 -c "import winrm; print('winrm accessible')"
 
       - name: Create inventory for localhost
         env:
@@ -81,6 +91,10 @@ jobs:
           WINDOWS_USER: ${{ secrets.WINDOWS_USER }}
           WINDOWS_PASSWORD: ${{ secrets.WINDOWS_PASSWORD }}
         run: |
+          # Get exact python3 path
+          PYTHON_PATH=$(which python3)
+          echo "Using Python: $PYTHON_PATH"
+
           cat > ansible/inventory-local.ini << EOF
           [windows_servers]
           your-pc ansible_host=${YOUR_PC_IP}
@@ -93,9 +107,10 @@ jobs:
           ansible_winrm_port=5985
           ansible_winrm_scheme=http
           ansible_winrm_server_cert_validation=ignore
-          ansible_python_interpreter=/usr/bin/python3
+          ansible_python_interpreter=${PYTHON_PATH}
           EOF
-          echo "--- Inventory created ---"
+
+          echo "--- Inventory (password hidden) ---"
           grep -v password ansible/inventory-local.ini
 
       - name: Test WinRM ping to YOUR PC
@@ -136,7 +151,7 @@ jobs:
           echo "  Deploy Localhost: ${{ needs.deploy-localhost.result }}"
           echo "========================================"
           if [ "${{ needs.deploy-localhost.result }}" == "success" ]; then
-            echo "SUCCESS! App deployed to your Windows PC"
+            echo "SUCCESS - App deployed to your Windows PC!"
           else
             echo "FAILED - Check logs above"
           fi
