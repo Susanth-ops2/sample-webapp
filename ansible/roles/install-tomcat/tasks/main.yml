@@ -1,0 +1,90 @@
+# ============================================================
+# roles/install-tomcat/tasks/main.yml — Windows
+# Downloads Tomcat 10 and installs it as a Windows Service
+# ============================================================
+---
+
+- name: Check if Tomcat is already installed
+  win_stat:
+    path: "{{ tomcat_install_dir }}\\bin\\catalina.bat"
+  register: tomcat_check
+
+- name: Create Tomcat install directory
+  win_file:
+    path: "{{ tomcat_install_dir }}"
+    state: directory
+  when: not tomcat_check.stat.exists
+
+- name: Download Apache Tomcat {{ tomcat_version }} for Windows
+  win_get_url:
+    url: "https://archive.apache.org/dist/tomcat/tomcat-10/v{{ tomcat_version }}/bin/apache-tomcat-{{ tomcat_version }}-windows-x64.zip"
+    dest: "C:\\Temp\\apache-tomcat-{{ tomcat_version }}.zip"
+    force: no
+  when: not tomcat_check.stat.exists
+
+- name: Unzip Tomcat archive
+  win_unzip:
+    src: "C:\\Temp\\apache-tomcat-{{ tomcat_version }}.zip"
+    dest: 'C:\Temp\tomcat-extracted\'
+    delete_archive: no
+  when: not tomcat_check.stat.exists
+
+- name: Move Tomcat files to install directory
+  win_command: >
+    robocopy "C:\Temp\tomcat-extracted\apache-tomcat-{{ tomcat_version }}"
+    "{{ tomcat_install_dir }}" /E /MOVE
+  when: not tomcat_check.stat.exists
+  failed_when: false
+
+- name: Render server.xml from J2 template
+  template:
+    src: server.xml.j2
+    dest: "{{ tomcat_install_dir }}\\conf\\server.xml"
+  notify: Restart Tomcat service
+
+- name: Set CATALINA_HOME environment variable
+  win_environment:
+    name: CATALINA_HOME
+    value: "{{ tomcat_install_dir }}"
+    state: present
+    level: machine
+
+- name: Set CATALINA_BASE environment variable
+  win_environment:
+    name: CATALINA_BASE
+    value: "{{ tomcat_install_dir }}"
+    state: present
+    level: machine
+
+- name: Set JVM options in setenv.bat
+  win_copy:
+    content: |
+      set JAVA_OPTS=-Xms{{ jvm_xms }} -Xmx{{ jvm_xmx }} -server
+      set CATALINA_HOME={{ tomcat_install_dir }}
+      set JAVA_HOME={{ java_install_dir }}
+    dest: "{{ tomcat_install_dir }}\\bin\\setenv.bat"
+
+- name: Install Tomcat as Windows Service using service.bat
+  win_command: >
+    cmd /c "{{ tomcat_install_dir }}\bin\service.bat" install {{ tomcat_service_name }}
+  args:
+    creates: "C:\\Windows\\System32\\{{ tomcat_service_name }}.exe"
+  environment:
+    JAVA_HOME: "{{ java_install_dir }}"
+    CATALINA_HOME: "{{ tomcat_install_dir }}"
+
+- name: Set Tomcat service to start automatically
+  win_service:
+    name: "{{ tomcat_service_name }}"
+    start_mode: auto
+    state: started
+
+- name: Wait for Tomcat to start on port {{ tomcat_port }}
+  win_wait_for:
+    port: "{{ tomcat_port }}"
+    delay: 5
+    timeout: 60
+
+- name: Confirm Tomcat is running
+  debug:
+    msg: "Tomcat {{ tomcat_version }} is running on port {{ tomcat_port }}"

@@ -1,0 +1,41 @@
+# ============================================================
+# roles/deploy-app/defaults/main.yml — Windows
+# Default variable values — overridden by group_vars/host_vars
+# ============================================================
+---
+
+app_name: "sample-webapp"
+app_version: "1.0.0"
+app_environment: "development"
+app_config_dir: 'C:\Tomcat\conf\sample-webapp'
+war_src: "..\target\sample-webapp.war"
+
+tomcat_install_dir: 'C:\Tomcat'
+tomcat_service_name: "Tomcat10"
+tomcat_port: 8080
+tomcat_shutdown_port: 8005
+tomcat_max_threads: 150
+tomcat_min_spare_threads: 10
+tomcat_connection_timeout: 20000
+
+java_install_dir: 'C:\Java\jdk-11'
+java_home: 'C:\Java\jdk-11'
+jvm_xms: "256M"
+jvm_xmx: "512M"
+
+db_host: "localhost"
+db_port: 3306
+db_name: "sampledb"
+db_username: "dbuser"
+db_password: "changeme"
+db_max_pool_size: 10
+db_min_pool_size: 2
+
+log_level: "INFO"
+log_dir: 'C:\Tomcat\logs'
+log_max_size: "10MB"
+log_max_backups: 5
+
+feature_debug_mode: false
+feature_maintenance_mode: false
+feature_max_upload_size: "10MB"

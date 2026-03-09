@@ -1,0 +1,67 @@
+# ============================================================
+# roles/install-java/tasks/main.yml — Windows
+# Downloads and installs OpenJDK 11 on Windows
+# Uses win_* Ansible modules for Windows
+# ============================================================
+---
+
+- name: Check if Java is already installed
+  win_command: java -version
+  register: java_check
+  changed_when: false
+  failed_when: false
+
+- name: Show Java check result
+  debug:
+    msg: "{{ 'Java already installed: ' + java_check.stderr if java_check.rc == 0 else 'Java not found - installing now' }}"
+
+- name: Create Java install directory
+  win_file:
+    path: "{{ java_install_dir }}"
+    state: directory
+  when: java_check.rc != 0
+
+- name: Download OpenJDK 11 for Windows
+  win_get_url:
+    url: "https://download.java.net/java/GA/jdk11/9/GPL/openjdk-11.0.2_windows-x64_bin.zip"
+    dest: 'C:\Temp\openjdk-11.zip'
+    force: no
+  when: java_check.rc != 0
+
+- name: Unzip OpenJDK 11
+  win_unzip:
+    src: 'C:\Temp\openjdk-11.zip'
+    dest: 'C:\Java\'
+    delete_archive: no
+  when: java_check.rc != 0
+
+- name: Rename extracted JDK folder to jdk-11
+  win_command: >
+    cmd /c rename "C:\Java\jdk-11.0.2" "jdk-11"
+  args:
+    creates: 'C:\Java\jdk-11\bin\java.exe'
+  when: java_check.rc != 0
+  failed_when: false
+
+- name: Set JAVA_HOME system environment variable
+  win_environment:
+    name: JAVA_HOME
+    value: "{{ java_install_dir }}"
+    state: present
+    level: machine
+
+- name: Add Java bin to system PATH
+  win_path:
+    elements:
+      - "{{ java_install_dir }}\\bin"
+    state: present
+    scope: machine
+
+- name: Verify Java installation after install
+  win_command: java -version
+  register: java_verify
+  changed_when: false
+
+- name: Print Java version
+  debug:
+    msg: "Java installed successfully: {{ java_verify.stderr }}"

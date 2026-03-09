@@ -1,5 +1,32 @@
-/target/
-/.settings/
-/.classpath
-/.project
+# ============================================================
+# .gitignore
+# IMPORTANT: Never commit passwords or sensitive files!
+# ============================================================
 
+# Maven build output
+target/
+*.class
+*.war
+*.jar
+
+# Ansible generated inventories (contain passwords!)
+ansible/inventory-local.ini
+ansible/inventory-ajith.ini
+ansible/ansible.log
+ansible/*.retry
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Secrets — never commit these!
+*.pem
+*.key
+secrets.yml
+vault_password

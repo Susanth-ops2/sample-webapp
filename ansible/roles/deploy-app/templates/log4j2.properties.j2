@@ -1,0 +1,40 @@
+# ============================================================
+# log4j2.properties.j2 — Jinja2 Template (Windows)
+# Rendered by Ansible → C:\Tomcat\conf\sample-webapp\log4j2.properties
+# ============================================================
+
+rootLogger.level = {{ log_level | default('INFO') }}
+rootLogger.appenderRefs = stdout, file
+rootLogger.appenderRef.stdout.ref = ConsoleAppender
+rootLogger.appenderRef.file.ref = FileAppender
+
+appender.console.type = Console
+appender.console.name = ConsoleAppender
+appender.console.layout.type = PatternLayout
+appender.console.layout.pattern = %d{yyyy-MM-dd HH:mm:ss} [%t] %-5level %logger{36} - %msg%n
+
+appender.file.type = RollingFile
+appender.file.name = FileAppender
+appender.file.fileName = {{ log_dir }}\{{ app_name }}\app.log
+appender.file.filePattern = {{ log_dir }}\{{ app_name }}\app-%d{yyyy-MM-dd}-%i.log.gz
+appender.file.layout.type = PatternLayout
+appender.file.layout.pattern = %d{yyyy-MM-dd HH:mm:ss} [%t] %-5level %logger{36} - %msg%n
+appender.file.policies.type = Policies
+appender.file.policies.size.type = SizeBasedTriggeringPolicy
+appender.file.policies.size.size = {{ log_max_size | default('10MB') }}
+appender.file.strategy.type = DefaultRolloverStrategy
+appender.file.strategy.max = {{ log_max_backups | default(5) }}
+
+logger.app.name = com.sample.app
+logger.app.level = {{ log_level | default('INFO') }}
+logger.app.additivity = false
+logger.app.appenderRefs = file
+logger.app.appenderRef.file.ref = FileAppender
+
+{% if app_environment == 'development' %}
+logger.debug.name = com.sample
+logger.debug.level = DEBUG
+logger.debug.additivity = false
+logger.debug.appenderRefs = stdout
+logger.debug.appenderRef.stdout.ref = ConsoleAppender
+{% endif %}

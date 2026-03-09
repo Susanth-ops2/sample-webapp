@@ -1,0 +1,110 @@
+# ============================================================
+# roles/deploy-app/tasks/main.yml — Windows
+# Deploys WAR + renders J2 config files on Windows server
+# ============================================================
+---
+
+# ── Step 1: Create config and log directories ────────────────
+- name: Create app config directory
+  win_file:
+    path: "{{ app_config_dir }}"
+    state: directory
+
+- name: Create app log directory
+  win_file:
+    path: "{{ log_dir }}\\{{ app_name }}"
+    state: directory
+
+# ── Step 2: Render J2 Templates → Config Files ───────────────
+- name: "[J2] Render application.properties from template"
+  template:
+    src: application.properties.j2
+    dest: "{{ app_config_dir }}\\application.properties"
+  notify: Restart Tomcat service
+
+- name: "[J2] Render log4j2.properties from template"
+  template:
+    src: log4j2.properties.j2
+    dest: "{{ app_config_dir }}\\log4j2.properties"
+  notify: Restart Tomcat service
+
+- name: "[J2] Render deploy-report HTML from template"
+  template:
+    src: deploy-report.html.j2
+    dest: "{{ tomcat_install_dir }}\\webapps\\ROOT\\deploy-status.html"
+
+# ── Step 3: Stop Tomcat Windows Service ──────────────────────
+- name: Stop Tomcat Windows service
+  win_service:
+    name: "{{ tomcat_service_name }}"
+    state: stopped
+
+- name: Wait for Tomcat to fully stop
+  win_wait_for:
+    port: "{{ tomcat_port }}"
+    state: stopped
+    timeout: 30
+  failed_when: false
+
+# ── Step 4: Remove old WAR and exploded app ───────────────────
+- name: Remove old WAR file
+  win_file:
+    path: "{{ tomcat_install_dir }}\\webapps\\{{ app_name }}.war"
+    state: absent
+
+- name: Remove old exploded app directory
+  win_file:
+    path: "{{ tomcat_install_dir }}\\webapps\\{{ app_name }}"
+    state: absent
+
+# ── Step 5: Deploy new WAR ───────────────────────────────────
+- name: Copy new WAR file to Tomcat webapps
+  win_copy:
+    src: "{{ war_src }}"
+    dest: "{{ tomcat_install_dir }}\\webapps\\{{ app_name }}.war"
+
+- name: Confirm WAR file exists
+  win_stat:
+    path: "{{ tomcat_install_dir }}\\webapps\\{{ app_name }}.war"
+  register: war_stat
+
+- name: Show WAR file details
+  debug:
+    msg: "WAR deployed: {{ tomcat_install_dir }}\\webapps\\{{ app_name }}.war | Size: {{ war_stat.stat.size }} bytes"
+
+# ── Step 6: Start Tomcat Windows Service ─────────────────────
+- name: Start Tomcat Windows service
+  win_service:
+    name: "{{ tomcat_service_name }}"
+    state: started
+
+- name: Wait for Tomcat to come up on port {{ tomcat_port }}
+  win_wait_for:
+    port: "{{ tomcat_port }}"
+    delay: 10
+    timeout: 90
+
+# ── Step 7: Verify app is responding ─────────────────────────
+- name: Verify application URL responds HTTP 200
+  win_uri:
+    url: "http://localhost:{{ tomcat_port }}/{{ app_name }}/"
+    status_code: 200
+  register: app_check
+  retries: 5
+  delay: 10
+  until: app_check.status_code == 200
+
+# ── Step 8: Print summary ────────────────────────────────────
+- name: Deployment Summary
+  debug:
+    msg: |
+      =====================================================
+      DEPLOYMENT SUCCESSFUL on Windows
+      =====================================================
+      App      : {{ app_name }}
+      Version  : {{ app_version }}
+      Env      : {{ app_environment }}
+      Server   : {{ ansible_host }}
+      App URL  : http://{{ ansible_host }}:{{ tomcat_port }}/{{ app_name }}/
+      Report   : http://{{ ansible_host }}:{{ tomcat_port }}/deploy-status.html
+      =====================================================

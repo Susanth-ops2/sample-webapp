@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<!--
+  deploy-report.html.j2 — Jinja2 Template (Windows)
+  Generated at: C:\Tomcat\webapps\ROOT\deploy-status.html
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Deployment Report — {{ app_name }}</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f5f7fa; margin: 0; padding: 30px; }
+    .card { background: white; border-radius: 8px; padding: 24px; max-width: 700px;
+            margin: auto; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    th { background: #3498db; color: white; padding: 10px; text-align: left; }
+    td { padding: 9px 10px; border-bottom: 1px solid #eee; }
+    .badge { padding: 4px 10px; border-radius: 12px; font-size: 13px; font-weight: bold; }
+    .success { background: #d4edda; color: #155724; }
+    .env-prod { background: #f8d7da; color: #721c24; }
+    .env-dev  { background: #d1ecf1; color: #0c5460; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>Deployment Report</h1>
+  <table>
+    <tr><th colspan="2">Application</th></tr>
+    <tr><td>Name</td>        <td><strong>{{ app_name }}</strong></td></tr>
+    <tr><td>Version</td>     <td>{{ app_version }}</td></tr>
+    <tr><td>Environment</td> <td><span class="badge {% if app_environment == 'production' %}env-prod{% else %}env-dev{% endif %}">{{ app_environment | upper }}</span></td></tr>
+    <tr><td>Status</td>      <td><span class="badge success">DEPLOYED</span></td></tr>
+
+    <tr><th colspan="2">Windows Server</th></tr>
+    <tr><td>Host</td>         <td>{{ inventory_hostname }} ({{ ansible_host }})</td></tr>
+    <tr><td>OS</td>           <td>{{ ansible_distribution }} {{ ansible_distribution_version }}</td></tr>
+    <tr><td>Java</td>         <td>Java {{ java_version }} — {{ java_install_dir }}</td></tr>
+    <tr><td>Tomcat</td>       <td>{{ tomcat_version }} — {{ tomcat_install_dir }}</td></tr>
+    <tr><td>Tomcat Service</td><td>{{ tomcat_service_name }}</td></tr>
+    <tr><td>Port</td>         <td>{{ tomcat_port }}</td></tr>
+
+    <tr><th colspan="2">Deploy Info</th></tr>
+    <tr><td>Deployed By</td>  <td>Ansible via Jenkins Pipeline</td></tr>
+    <tr><td>Deploy Time</td>  <td>{{ ansible_date_time.date }} {{ ansible_date_time.time }}</td></tr>
+    <tr><td>App URL</td>      <td><a href="http://{{ ansible_host }}:{{ tomcat_port }}/{{ app_name }}/">
+        http://{{ ansible_host }}:{{ tomcat_port }}/{{ app_name }}/</a></td></tr>
+  </table>
+</div>
+</body>
+</html>

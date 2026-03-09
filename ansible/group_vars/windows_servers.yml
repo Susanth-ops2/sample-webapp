@@ -1,0 +1,55 @@
+# ============================================================
+# group_vars/windows_servers.yml
+# Shared variables for all Windows target servers
+# ============================================================
+---
+
+# ── Connection ───────────────────────────────────────────────
+ansible_connection: winrm
+ansible_winrm_transport: ntlm
+ansible_winrm_port: 5985
+ansible_winrm_scheme: http
+ansible_winrm_server_cert_validation: ignore
+
+# ── App ──────────────────────────────────────────────────────
+app_name: "sample-webapp"
+app_version: "1.0.0"
+app_environment: "staging"
+app_config_dir: 'C:\Tomcat\conf\sample-webapp'
+
+# ── Java ─────────────────────────────────────────────────────
+java_version: "11"
+java_install_dir: 'C:\Java\jdk-11'
+java_home: 'C:\Java\jdk-11'
+
+# ── Tomcat ───────────────────────────────────────────────────
+tomcat_version: "10.1.13"
+tomcat_install_dir: 'C:\Tomcat'
+tomcat_port: 8080
+tomcat_shutdown_port: 8005
+tomcat_service_name: "Tomcat10"
+tomcat_max_threads: 100
+tomcat_min_spare_threads: 10
+tomcat_connection_timeout: 20000
+
+# ── JVM ──────────────────────────────────────────────────────
+jvm_xms: "256M"
+jvm_xmx: "512M"
+
+# ── Database ─────────────────────────────────────────────────
+db_host: "localhost"
+db_port: 3306
+db_name: "sampledb_staging"
+db_username: "appuser"
+db_password: "StagePass@2024"
+
+# ── Logging ──────────────────────────────────────────────────
+log_level: "DEBUG"
+log_dir: 'C:\Tomcat\logs'
+log_max_size: "10MB"
+log_max_backups: 5
+
+# ── Feature Flags ────────────────────────────────────────────
+feature_debug_mode: true
+feature_maintenance_mode: false
+feature_max_upload_size: "10MB"

@@ -1,0 +1,37 @@
+# ============================================================
+# .github/workflows/test-only.yml
+# Runs on every Pull Request — only builds and tests
+# Does NOT deploy
+# ============================================================
+
+name: Build & Test (Pull Request Check)
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    name: Maven Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build and Test
+        run: mvn clean package
+
+      - name: Publish Test Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr-test-results
+          path: target/surefire-reports/

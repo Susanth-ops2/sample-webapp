@@ -1,0 +1,30 @@
+# ============================================================
+# application.properties.j2 — Jinja2 Template (Windows)
+# Rendered by Ansible → C:\Tomcat\conf\sample-webapp\application.properties
+# Generated on: {{ ansible_date_time.date }} for {{ inventory_hostname }}
+# ============================================================
+
+app.name={{ app_name }}
+app.version={{ app_version }}
+app.environment={{ app_environment }}
+
+server.host={{ ansible_host }}
+server.port={{ tomcat_port }}
+server.context=/{{ app_name }}
+
+db.host={{ db_host }}
+db.port={{ db_port }}
+db.name={{ db_name }}
+db.username={{ db_username }}
+db.password={{ db_password }}
+db.max.pool.size={{ db_max_pool_size | default(10) }}
+db.min.pool.size={{ db_min_pool_size | default(2) }}
+
+log.level={{ log_level | default('INFO') }}
+log.file={{ log_dir }}\{{ app_name }}\app.log
+log.max.size={{ log_max_size | default('10MB') }}
+log.max.backups={{ log_max_backups | default(5) }}
+
+feature.debug.mode={{ feature_debug_mode | default('false') | lower }}
+feature.maintenance.mode={{ feature_maintenance_mode | default('false') | lower }}
+feature.max.upload.size={{ feature_max_upload_size | default('10MB') }}

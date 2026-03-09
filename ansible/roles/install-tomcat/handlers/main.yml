@@ -1,0 +1,9 @@
+# ============================================================
+# roles/install-tomcat/handlers/main.yml — Windows
+# ============================================================
+---
+
+- name: Restart Tomcat service
+  win_service:
+    name: "{{ tomcat_service_name }}"
+    state: restarted
