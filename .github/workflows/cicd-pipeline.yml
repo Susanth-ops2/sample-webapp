@@ -71,7 +71,7 @@ jobs:
           pip3 install pywinrm
           pip3 install "pywinrm[credssp]"
           pip3 install requests-ntlm
-          python3 -c "import winrm; print('pywinrm OK:', winrm.__version__)"
+          python3 -c "import winrm; print('pywinrm installed OK')"
 
       - name: Create inventory for localhost
         env:
