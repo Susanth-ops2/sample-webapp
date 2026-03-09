@@ -1,11 +1,10 @@
 # ============================================================
 # .github/workflows/cicd-pipeline.yml
 # PHASE 1 - LOCALHOST ONLY
-# Ajith server will be added later after localhost works
 #
 # GitHub Secrets needed:
 #   YOUR_PC_IP       → 172.30.28.8
-#   WINDOWS_USER     → your Windows username ($env:USERNAME)
+#   WINDOWS_USER     → AGRC
 #   WINDOWS_PASSWORD → your Windows login password
 # ============================================================
 
@@ -63,15 +62,18 @@ jobs:
           name: sample-webapp-war
           path: target/
 
-      - name: Install Ansible and pywinrm
+      - name: Install Ansible and pywinrm (FIXED - system level)
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y ansible python3-pip python3-dev
-          pip3 install --upgrade pip
-          pip3 install pywinrm
-          pip3 install "pywinrm[credssp]"
-          pip3 install requests-ntlm
-          python3 -c "import winrm; print('pywinrm installed OK')"
+
+          # Install pywinrm at SYSTEM level so Ansible can find it
+          sudo pip3 install pywinrm --break-system-packages
+          sudo pip3 install requests-ntlm --break-system-packages
+          sudo pip3 install requests-credssp --break-system-packages
+
+          # Verify pywinrm is available to system Python
+          sudo python3 -c "import winrm; print('pywinrm installed OK at system level')"
 
       - name: Create inventory for localhost
         env:
@@ -91,9 +93,9 @@ jobs:
           ansible_winrm_port=5985
           ansible_winrm_scheme=http
           ansible_winrm_server_cert_validation=ignore
-          ansible_python_interpreter=auto_silent
+          ansible_python_interpreter=/usr/bin/python3
           EOF
-          echo "--- Inventory created (password hidden) ---"
+          echo "--- Inventory created ---"
           grep -v password ansible/inventory-local.ini
 
       - name: Test WinRM ping to YOUR PC
@@ -133,10 +135,8 @@ jobs:
           echo "  Build           : ${{ needs.build.result }}"
           echo "  Deploy Localhost: ${{ needs.deploy-localhost.result }}"
           echo "========================================"
-          echo ""
           if [ "${{ needs.deploy-localhost.result }}" == "success" ]; then
             echo "SUCCESS! App deployed to your Windows PC"
-            echo "Open: http://${{ secrets.YOUR_PC_IP }}:8080/sample-webapp/"
           else
-            echo "FAILED - Check logs above for errors"
+            echo "FAILED - Check logs above"
           fi
