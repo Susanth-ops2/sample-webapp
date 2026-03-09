@@ -1,42 +1,26 @@
 # ============================================================
 # .github/workflows/cicd-pipeline.yml
-# GitHub Actions CI/CD Pipeline
+# PHASE 1 - LOCALHOST ONLY
+# Ajith server will be added later after localhost works
 #
-# Flow:
-#   Git Push → GitHub Actions (Linux Runner)
-#           → Maven Build + Test
-#           → Ansible deploys to YOUR Windows PC
-#           → Ansible deploys to AJITH's Windows PC
-#
-# SETUP REQUIRED (one time):
-#   Go to GitHub repo → Settings → Secrets and variables → Actions
-#   Add these secrets:
-#     WINDOWS_USER         → your Windows username
-#     WINDOWS_PASSWORD     → your Windows login password
-#     YOUR_PC_IP           → your Windows PC IP (172.30.28.8)
-#     AJITH_PC_IP          → Ajith's Windows PC IP
-#     AJITH_USER           → Ajith's Windows username
-#     AJITH_PASSWORD       → Ajith's Windows password
+# GitHub Secrets needed:
+#   YOUR_PC_IP       → 172.30.28.8
+#   WINDOWS_USER     → your Windows username ($env:USERNAME)
+#   WINDOWS_PASSWORD → your Windows login password
 # ============================================================
 
-name: CI/CD Pipeline — Maven Build + Ansible Deploy to Windows
+name: CI/CD Pipeline - Localhost Only (Phase 1)
 
 on:
   push:
-    branches: [ main, develop ]
-  pull_request:
     branches: [ main ]
-  workflow_dispatch:       # Allow manual trigger from GitHub UI
-
-env:
-  APP_NAME: sample-webapp
-  TOMCAT_PORT: 8080
+  workflow_dispatch:
 
 jobs:
 
-  # ── Job 1: Build and Test with Maven ──────────────────────
+  # ── Job 1: Maven Build and Test ───────────────────────────
   build:
-    name: Maven Build & Test
+    name: Maven Build and Test
     runs-on: ubuntu-latest
 
     steps:
@@ -56,13 +40,6 @@ jobs:
       - name: Run Unit Tests
         run: mvn test
 
-      - name: Publish Test Results
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: test-results
-          path: target/surefire-reports/*.xml
-
       - name: Upload WAR artifact
         uses: actions/upload-artifact@v4
         with:
@@ -70,12 +47,11 @@ jobs:
           path: target/sample-webapp.war
           retention-days: 5
 
-  # ── Job 2: Deploy to YOUR Windows PC ──────────────────────
-  deploy-local:
-    name: Deploy to Your Windows PC
+  # ── Job 2: Deploy to YOUR Windows PC (localhost) ──────────
+  deploy-localhost:
+    name: Deploy to Localhost
     runs-on: ubuntu-latest
-    needs: build                  # Only runs if build job passes
-    if: github.ref == 'refs/heads/main'
+    needs: build
 
     steps:
       - name: Checkout source code
@@ -87,13 +63,17 @@ jobs:
           name: sample-webapp-war
           path: target/
 
-      - name: Install Ansible + pywinrm
+      - name: Install Ansible and pywinrm
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y ansible python3-pip
-          pip3 install pywinrm requests-ntlm
+          sudo apt-get install -y ansible python3-pip python3-dev
+          pip3 install --upgrade pip
+          pip3 install pywinrm
+          pip3 install "pywinrm[credssp]"
+          pip3 install requests-ntlm
+          python3 -c "import winrm; print('pywinrm OK:', winrm.__version__)"
 
-      - name: Create inventory for YOUR PC
+      - name: Create inventory for localhost
         env:
           YOUR_PC_IP: ${{ secrets.YOUR_PC_IP }}
           WINDOWS_USER: ${{ secrets.WINDOWS_USER }}
@@ -113,105 +93,50 @@ jobs:
           ansible_winrm_server_cert_validation=ignore
           ansible_python_interpreter=auto_silent
           EOF
+          echo "--- Inventory created (password hidden) ---"
+          grep -v password ansible/inventory-local.ini
 
-      - name: Test WinRM connection to YOUR PC
+      - name: Test WinRM ping to YOUR PC
         run: |
           cd ansible
-          ansible windows_servers -i inventory-local.ini -m win_ping
+          ansible windows_servers -i inventory-local.ini -m win_ping -v
 
-      - name: Deploy to YOUR Windows PC via Ansible
+      - name: Deploy to YOUR PC via Ansible
         run: |
           cd ansible
           ansible-playbook -i inventory-local.ini deploy.yml \
             --extra-vars "war_src=../target/sample-webapp.war" \
             -v
 
-      - name: Verify app on YOUR PC
+      - name: Verify app is running
         env:
           YOUR_PC_IP: ${{ secrets.YOUR_PC_IP }}
         run: |
+          echo "Waiting for Tomcat to start..."
           sleep 15
-          curl -s -o /dev/null -w "HTTP Status YOUR PC: %{http_code}\n" \
-            http://${YOUR_PC_IP}:8080/sample-webapp/ || echo "Check app manually"
+          curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" \
+            http://${YOUR_PC_IP}:8080/sample-webapp/ || echo "Manual check needed"
 
-  # ── Job 3: Deploy to AJITH's Windows PC ───────────────────
-  deploy-ajith:
-    name: Deploy to Ajith's Windows PC
-    runs-on: ubuntu-latest
-    needs: deploy-local           # Only after local deploy succeeds
-    if: github.ref == 'refs/heads/main'
-
-    steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
-
-      - name: Download WAR artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: sample-webapp-war
-          path: target/
-
-      - name: Install Ansible + pywinrm
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y ansible python3-pip
-          pip3 install pywinrm requests-ntlm
-
-      - name: Create inventory for AJITH's PC
-        env:
-          AJITH_PC_IP: ${{ secrets.AJITH_PC_IP }}
-          AJITH_USER: ${{ secrets.AJITH_USER }}
-          AJITH_PASSWORD: ${{ secrets.AJITH_PASSWORD }}
-        run: |
-          cat > ansible/inventory-ajith.ini << EOF
-          [windows_servers]
-          ajith-pc ansible_host=${AJITH_PC_IP}
-
-          [windows_servers:vars]
-          ansible_user=${AJITH_USER}
-          ansible_password=${AJITH_PASSWORD}
-          ansible_connection=winrm
-          ansible_winrm_transport=basic
-          ansible_winrm_port=5985
-          ansible_winrm_scheme=http
-          ansible_winrm_server_cert_validation=ignore
-          ansible_python_interpreter=auto_silent
-          EOF
-
-      - name: Test WinRM connection to AJITH's PC
-        run: |
-          cd ansible
-          ansible windows_servers -i inventory-ajith.ini -m win_ping
-
-      - name: Deploy to AJITH's Windows PC via Ansible
-        run: |
-          cd ansible
-          ansible-playbook -i inventory-ajith.ini deploy.yml \
-            --extra-vars "war_src=../target/sample-webapp.war" \
-            -v
-
-      - name: Verify app on AJITH's PC
-        env:
-          AJITH_PC_IP: ${{ secrets.AJITH_PC_IP }}
-        run: |
-          sleep 15
-          curl -s -o /dev/null -w "HTTP Status AJITH PC: %{http_code}\n" \
-            http://${AJITH_PC_IP}:8080/sample-webapp/ || echo "Check app manually"
-
-  # ── Job 4: Final notification ─────────────────────────────
-  notify:
+  # ── Job 3: Summary ────────────────────────────────────────
+  summary:
     name: Pipeline Summary
     runs-on: ubuntu-latest
-    needs: [build, deploy-local, deploy-ajith]
+    needs: [build, deploy-localhost]
     if: always()
 
     steps:
-      - name: Pipeline Result
+      - name: Show Results
         run: |
-          echo "============================================"
-          echo "  CI/CD PIPELINE SUMMARY"
-          echo "============================================"
-          echo "  Build        : ${{ needs.build.result }}"
-          echo "  Deploy Local : ${{ needs.deploy-local.result }}"
-          echo "  Deploy Ajith : ${{ needs.deploy-ajith.result }}"
-          echo "============================================"
+          echo "========================================"
+          echo "  PIPELINE SUMMARY (Phase 1 - Localhost)"
+          echo "========================================"
+          echo "  Build           : ${{ needs.build.result }}"
+          echo "  Deploy Localhost: ${{ needs.deploy-localhost.result }}"
+          echo "========================================"
+          echo ""
+          if [ "${{ needs.deploy-localhost.result }}" == "success" ]; then
+            echo "SUCCESS! App deployed to your Windows PC"
+            echo "Open: http://${{ secrets.YOUR_PC_IP }}:8080/sample-webapp/"
+          else
+            echo "FAILED - Check logs above for errors"
+          fi
