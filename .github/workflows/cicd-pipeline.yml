@@ -46,28 +46,68 @@ jobs:
           name: sample-webapp-war
           path: target/
 
-      - name: Install Ansible and pywinrm
-        run: pip install ansible pywinrm requests-ntlm
+      - name: Find Python and install Ansible + pywinrm
+        shell: powershell
+        run: |
+          # Find Python wherever it is installed
+          $pythonPaths = @(
+            "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe",
+            "C:\Python313\python.exe",
+            "C:\Python311\python.exe",
+            "C:\Program Files\Python313\python.exe"
+          )
+
+          $python = $null
+          foreach ($p in $pythonPaths) {
+            if (Test-Path $p) {
+              $python = $p
+              Write-Host "Found Python at: $python"
+              break
+            }
+          }
+
+          if (-not $python) {
+            # Last resort - search for it
+            $python = (Get-Command python -ErrorAction SilentlyContinue).Source
+            Write-Host "Found Python via PATH: $python"
+          }
+
+          if (-not $python) {
+            Write-Error "Python not found! Please install Python 3.x"
+            exit 1
+          }
+
+          # Save python path for next steps
+          echo "PYTHON_EXE=$python" >> $env:GITHUB_ENV
+
+          # Install packages using full path
+          & $python -m pip install --upgrade pip
+          & $python -m pip install ansible pywinrm requests-ntlm
+          
+          # Verify
+          & $python -c "import winrm; print('pywinrm OK')"
+          & $python -m ansible --version
 
       - name: Create inventory for localhost
+        shell: powershell
         env:
           WINDOWS_USER: ${{ secrets.WINDOWS_USER }}
           WINDOWS_PASSWORD: ${{ secrets.WINDOWS_PASSWORD }}
-        shell: powershell
         run: |
           $content = @"
-          [windows_servers]
-          your-pc ansible_host=127.0.0.1
+[windows_servers]
+your-pc ansible_host=127.0.0.1
 
-          [windows_servers:vars]
-          ansible_user=$env:WINDOWS_USER
-          ansible_password=$env:WINDOWS_PASSWORD
-          ansible_connection=winrm
-          ansible_winrm_transport=basic
-          ansible_winrm_port=5985
-          ansible_winrm_scheme=http
-          ansible_winrm_server_cert_validation=ignore
-          "@
+[windows_servers:vars]
+ansible_user=$env:WINDOWS_USER
+ansible_password=$env:WINDOWS_PASSWORD
+ansible_connection=winrm
+ansible_winrm_transport=basic
+ansible_winrm_port=5985
+ansible_winrm_scheme=http
+ansible_winrm_server_cert_validation=ignore
+ansible_python_interpreter=$env:PYTHON_EXE
+"@
           $content | Out-File -FilePath ansible\inventory-local.ini -Encoding utf8
           Write-Host "Inventory created:"
           Get-Content ansible\inventory-local.ini
@@ -76,24 +116,24 @@ jobs:
         shell: powershell
         run: |
           $content = @"
-          [defaults]
-          host_key_checking   = False
-          retry_files_enabled = False
-          roles_path          = roles
-          "@
+[defaults]
+host_key_checking   = False
+retry_files_enabled = False
+roles_path          = roles
+"@
           $content | Out-File -FilePath ansible\ansible.cfg -Encoding utf8
 
       - name: Test WinRM ping localhost
         shell: powershell
         run: |
           cd ansible
-          ansible windows_servers -i inventory-local.ini -m win_ping -v
+          & $env:PYTHON_EXE -m ansible windows_servers -i inventory-local.ini -m win_ping -v
 
       - name: Deploy via Ansible
         shell: powershell
         run: |
           cd ansible
-          ansible-playbook -i inventory-local.ini deploy.yml `
+          & $env:PYTHON_EXE -m ansible-playbook -i inventory-local.ini deploy.yml `
             --extra-vars "war_src=../target/sample-webapp.war" -v
 
       - name: Verify app
@@ -104,7 +144,7 @@ jobs:
             $r = Invoke-WebRequest -Uri "http://127.0.0.1:8080/sample-webapp/" -UseBasicParsing
             Write-Host "SUCCESS - HTTP Status: $($r.StatusCode)"
           } catch {
-            Write-Host "App not responding - check manually at http://localhost:8080/sample-webapp/"
+            Write-Host "Check manually at http://localhost:8080/sample-webapp/"
           }
 
   summary:
