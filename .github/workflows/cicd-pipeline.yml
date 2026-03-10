@@ -35,7 +35,6 @@ jobs:
     name: Deploy to Localhost
     runs-on: self-hosted
     needs: build
-
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
@@ -46,82 +45,31 @@ jobs:
           name: sample-webapp-war
           path: target/
 
-      - name: Find Python and install Ansible + pywinrm
+      - name: Find Python and install packages
         shell: powershell
         run: |
-          # Find Python wherever it is installed
-          $pythonPaths = @(
-            "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe",
-            "C:\Python313\python.exe",
-            "C:\Python311\python.exe",
-            "C:\Program Files\Python313\python.exe"
-          )
-
-          $python = $null
-          foreach ($p in $pythonPaths) {
-            if (Test-Path $p) {
-              $python = $p
-              Write-Host "Found Python at: $python"
-              break
-            }
-          }
-
-          if (-not $python) {
-            # Last resort - search for it
+          $python = "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe"
+          if (-not (Test-Path $python)) {
             $python = (Get-Command python -ErrorAction SilentlyContinue).Source
-            Write-Host "Found Python via PATH: $python"
           }
-
-          if (-not $python) {
-            Write-Error "Python not found! Please install Python 3.x"
-            exit 1
-          }
-
-          # Save python path for next steps
-          echo "PYTHON_EXE=$python" >> $env:GITHUB_ENV
-
-          # Install packages using full path
+          Write-Host "Using Python: $python"
+          "PYTHON_EXE=$python" | Out-File -FilePath $env:GITHUB_ENV -Append
           & $python -m pip install --upgrade pip
           & $python -m pip install ansible pywinrm requests-ntlm
-          
-          # Verify
           & $python -c "import winrm; print('pywinrm OK')"
-          & $python -m ansible --version
 
-      - name: Create inventory for localhost
+      - name: Create inventory and ansible.cfg
         shell: powershell
         env:
           WINDOWS_USER: ${{ secrets.WINDOWS_USER }}
           WINDOWS_PASSWORD: ${{ secrets.WINDOWS_PASSWORD }}
         run: |
-          $content = @"
-[windows_servers]
-your-pc ansible_host=127.0.0.1
-
-[windows_servers:vars]
-ansible_user=$env:WINDOWS_USER
-ansible_password=$env:WINDOWS_PASSWORD
-ansible_connection=winrm
-ansible_winrm_transport=basic
-ansible_winrm_port=5985
-ansible_winrm_scheme=http
-ansible_winrm_server_cert_validation=ignore
-ansible_python_interpreter=$env:PYTHON_EXE
-"@
-          $content | Out-File -FilePath ansible\inventory-local.ini -Encoding utf8
+          $inv = "[windows_servers]`nyour-pc ansible_host=127.0.0.1`n`n[windows_servers:vars]`nansible_user=$env:WINDOWS_USER`nansible_password=$env:WINDOWS_PASSWORD`nansible_connection=winrm`nansible_winrm_transport=basic`nansible_winrm_port=5985`nansible_winrm_scheme=http`nansible_winrm_server_cert_validation=ignore`nansible_python_interpreter=$env:PYTHON_EXE"
+          $inv | Out-File -FilePath ansible\inventory-local.ini -Encoding utf8
+          $cfg = "[defaults]`nhost_key_checking=False`nretry_files_enabled=False`nroles_path=roles"
+          $cfg | Out-File -FilePath ansible\ansible.cfg -Encoding utf8
           Write-Host "Inventory created:"
           Get-Content ansible\inventory-local.ini
-
-      - name: Overwrite ansible.cfg
-        shell: powershell
-        run: |
-          $content = @"
-[defaults]
-host_key_checking   = False
-retry_files_enabled = False
-roles_path          = roles
-"@
-          $content | Out-File -FilePath ansible\ansible.cfg -Encoding utf8
 
       - name: Test WinRM ping localhost
         shell: powershell
@@ -133,8 +81,7 @@ roles_path          = roles
         shell: powershell
         run: |
           cd ansible
-          & $env:PYTHON_EXE -m ansible-playbook -i inventory-local.ini deploy.yml `
-            --extra-vars "war_src=../target/sample-webapp.war" -v
+          & $env:PYTHON_EXE -m ansible-playbook -i inventory-local.ini deploy.yml --extra-vars "war_src=../target/sample-webapp.war" -v
 
       - name: Verify app
         shell: powershell
@@ -156,7 +103,5 @@ roles_path          = roles
       - name: Show Results
         shell: powershell
         run: |
-          Write-Host "========================================"
           Write-Host "Build           : ${{ needs.build.result }}"
           Write-Host "Deploy Localhost: ${{ needs.deploy-localhost.result }}"
-          Write-Host "========================================"
