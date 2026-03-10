@@ -5,9 +5,6 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
-env:
-  PYTHON_EXE: C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe
-
 jobs:
 
   build:
@@ -48,13 +45,36 @@ jobs:
           name: sample-webapp-war
           path: target/
 
-      - name: Install pywinrm
-        shell: cmd
+      - name: Install pywinrm and create ansible wrapper
+        shell: powershell
         run: |
-          chcp 65001
-          set PYTHONUTF8=1
-          "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe" -m pip install pywinrm requests-ntlm --quiet
-          "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe" -c "import winrm; print('pywinrm OK')"
+          $python = "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe"
+
+          # Install pywinrm
+          & $python -m pip install pywinrm requests-ntlm --quiet
+          & $python -c "import winrm; print('pywinrm OK')"
+
+          # Create ansible wrapper script that forces UTF-8
+          $wrapper = @'
+          import sys
+          import os
+          os.environ['PYTHONUTF8'] = '1'
+          os.environ['PYTHONIOENCODING'] = 'utf-8'
+          if hasattr(sys.stdout, 'reconfigure'):
+              sys.stdout.reconfigure(encoding='utf-8')
+          if hasattr(sys.stderr, 'reconfigure'):
+              sys.stderr.reconfigure(encoding='utf-8')
+          '@
+
+          # Create ansible_ping.py wrapper
+          $ping_wrapper = $wrapper + "`nfrom ansible.cli.adhoc import main`nsys.argv = ['ansible', 'windows_servers', '-i', 'inventory-local.ini', '-m', 'win_ping', '-v']`nmain()`n"
+          $ping_wrapper | Out-File -FilePath ansible\run_ping.py -Encoding utf8
+
+          # Create ansible_deploy.py wrapper
+          $deploy_wrapper = $wrapper + "`nfrom ansible.cli.playbook import main`nimport sys`n"
+          $deploy_wrapper | Out-File -FilePath ansible\run_deploy.py -Encoding utf8
+
+          Write-Host "Wrapper scripts created"
 
       - name: Create inventory and ansible.cfg
         shell: powershell
@@ -62,7 +82,8 @@ jobs:
           WINDOWS_USER: ${{ secrets.WINDOWS_USER }}
           WINDOWS_PASSWORD: ${{ secrets.WINDOWS_PASSWORD }}
         run: |
-          $inv = "[windows_servers]`nyour-pc ansible_host=127.0.0.1`n`n[windows_servers:vars]`nansible_user=$env:WINDOWS_USER`nansible_password=$env:WINDOWS_PASSWORD`nansible_connection=winrm`nansible_winrm_transport=basic`nansible_winrm_port=5985`nansible_winrm_scheme=http`nansible_winrm_server_cert_validation=ignore`nansible_python_interpreter=$env:PYTHON_EXE"
+          $python = "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe"
+          $inv = "[windows_servers]`nyour-pc ansible_host=127.0.0.1`n`n[windows_servers:vars]`nansible_user=$env:WINDOWS_USER`nansible_password=$env:WINDOWS_PASSWORD`nansible_connection=winrm`nansible_winrm_transport=basic`nansible_winrm_port=5985`nansible_winrm_scheme=http`nansible_winrm_server_cert_validation=ignore`nansible_python_interpreter=$python"
           $inv | Out-File -FilePath ansible\inventory-local.ini -Encoding utf8
           $cfg = "[defaults]`nhost_key_checking=False`nretry_files_enabled=False`nroles_path=roles"
           $cfg | Out-File -FilePath ansible\ansible.cfg -Encoding utf8
@@ -70,22 +91,29 @@ jobs:
           Get-Content ansible\inventory-local.ini
 
       - name: Test WinRM ping localhost
-        shell: cmd
+        shell: powershell
         run: |
-          chcp 65001
-          set PYTHONUTF8=1
-          set PYTHONIOENCODING=utf-8
+          $python = "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe"
           cd ansible
-          "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe" -X utf8 -m ansible adhoc -i inventory-local.ini windows_servers -m win_ping -v
+          & $python -X utf8 run_ping.py
 
       - name: Deploy via Ansible
-        shell: cmd
+        shell: powershell
         run: |
-          chcp 65001
-          set PYTHONUTF8=1
-          set PYTHONIOENCODING=utf-8
+          $python = "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe"
+          $playbook = "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\Scripts\ansible-playbook.exe"
           cd ansible
-          "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe" -X utf8 -m ansible playbook -i inventory-local.ini deploy.yml --extra-vars "war_src=../target/sample-webapp.war" -v
+          $env:PYTHONUTF8 = "1"
+          $env:PYTHONIOENCODING = "utf-8"
+          # Use ansible-playbook.exe directly with UTF8 env vars set
+          & $python -X utf8 -c "
+          import sys, os
+          os.environ['PYTHONUTF8']='1'
+          os.environ['PYTHONIOENCODING']='utf-8'
+          sys.argv = ['ansible-playbook', '-i', 'inventory-local.ini', 'deploy.yml', '--extra-vars', 'war_src=../target/sample-webapp.war', '-v']
+          from ansible.cli.playbook import main
+          main()
+          "
 
       - name: Verify app
         shell: powershell
