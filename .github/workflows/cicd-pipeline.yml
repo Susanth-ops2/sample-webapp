@@ -1,4 +1,4 @@
-name: CI/CD Pipeline - Localhost Only (Phase 1)
+name: CI/CD Pipeline - Self Hosted Windows (Phase 1)
 
 on:
   push:
@@ -9,7 +9,7 @@ jobs:
 
   build:
     name: Maven Build and Test
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
@@ -33,7 +33,7 @@ jobs:
 
   deploy-localhost:
     name: Deploy to Localhost
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: build
 
     steps:
@@ -46,91 +46,77 @@ jobs:
           name: sample-webapp-war
           path: target/
 
-      - name: Setup Python 3.11 and install pywinrm
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+      - name: Install Ansible and pywinrm
+        run: pip install ansible pywinrm requests-ntlm
 
-      - name: Install Ansible and pywinrm into same Python
-        run: |
-          # Use the python from setup-python action
-          python --version
-          which python
-          which pip
-
-          # Install ansible and pywinrm into SAME python environment
-          pip install ansible
-          pip install pywinrm
-          pip install requests-ntlm
-          pip install requests-credssp
-
-          # Verify both in same environment
-          python -c "import winrm; print('winrm OK')"
-          ansible --version
-          echo "Ansible python: $(ansible --version | grep python)"
-
-      - name: Overwrite ansible.cfg
-        run: |
-          cat > ansible/ansible.cfg << 'EOF'
-          [defaults]
-          host_key_checking   = False
-          retry_files_enabled = False
-          roles_path          = roles
-          EOF
-
-      - name: Create inventory
+      - name: Create inventory for localhost
         env:
-          YOUR_PC_IP: ${{ secrets.YOUR_PC_IP }}
           WINDOWS_USER: ${{ secrets.WINDOWS_USER }}
           WINDOWS_PASSWORD: ${{ secrets.WINDOWS_PASSWORD }}
+        shell: powershell
         run: |
-          PYTHON_PATH=$(which python)
-          echo "Python path: $PYTHON_PATH"
-
-          cat > ansible/inventory-local.ini << EOF
+          $content = @"
           [windows_servers]
-          your-pc ansible_host=${YOUR_PC_IP}
+          your-pc ansible_host=127.0.0.1
 
           [windows_servers:vars]
-          ansible_user=${WINDOWS_USER}
-          ansible_password=${WINDOWS_PASSWORD}
+          ansible_user=$env:WINDOWS_USER
+          ansible_password=$env:WINDOWS_PASSWORD
           ansible_connection=winrm
           ansible_winrm_transport=basic
           ansible_winrm_port=5985
           ansible_winrm_scheme=http
           ansible_winrm_server_cert_validation=ignore
-          ansible_python_interpreter=${PYTHON_PATH}
-          EOF
+          "@
+          $content | Out-File -FilePath ansible\inventory-local.ini -Encoding utf8
+          Write-Host "Inventory created:"
+          Get-Content ansible\inventory-local.ini
 
-          echo "--- inventory (password hidden) ---"
-          grep -v password ansible/inventory-local.ini
+      - name: Overwrite ansible.cfg
+        shell: powershell
+        run: |
+          $content = @"
+          [defaults]
+          host_key_checking   = False
+          retry_files_enabled = False
+          roles_path          = roles
+          "@
+          $content | Out-File -FilePath ansible\ansible.cfg -Encoding utf8
 
-      - name: Test WinRM ping
+      - name: Test WinRM ping localhost
+        shell: powershell
         run: |
           cd ansible
           ansible windows_servers -i inventory-local.ini -m win_ping -v
 
       - name: Deploy via Ansible
+        shell: powershell
         run: |
           cd ansible
-          ansible-playbook -i inventory-local.ini deploy.yml \
+          ansible-playbook -i inventory-local.ini deploy.yml `
             --extra-vars "war_src=../target/sample-webapp.war" -v
 
       - name: Verify app
-        env:
-          YOUR_PC_IP: ${{ secrets.YOUR_PC_IP }}
+        shell: powershell
         run: |
-          sleep 15
-          curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" \
-            http://${YOUR_PC_IP}:8080/sample-webapp/ || echo "Check manually"
+          Start-Sleep -Seconds 15
+          try {
+            $r = Invoke-WebRequest -Uri "http://127.0.0.1:8080/sample-webapp/" -UseBasicParsing
+            Write-Host "SUCCESS - HTTP Status: $($r.StatusCode)"
+          } catch {
+            Write-Host "App not responding - check manually at http://localhost:8080/sample-webapp/"
+          }
 
   summary:
     name: Pipeline Summary
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: [build, deploy-localhost]
     if: always()
     steps:
       - name: Show Results
+        shell: powershell
         run: |
-          echo "Build           : ${{ needs.build.result }}"
-          echo "Deploy Localhost: ${{ needs.deploy-localhost.result }}"
+          Write-Host "========================================"
+          Write-Host "Build           : ${{ needs.build.result }}"
+          Write-Host "Deploy Localhost: ${{ needs.deploy-localhost.result }}"
+          Write-Host "========================================"
