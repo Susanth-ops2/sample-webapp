@@ -48,32 +48,13 @@ jobs:
           name: sample-webapp-war
           path: target/
 
-      - name: Fix system encoding to UTF-8
-        shell: powershell
-        run: |
-          # Fix Windows encoding permanently for this session
-          chcp 65001
-          [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-          [Console]::InputEncoding  = [System.Text.Encoding]::UTF8
-          $env:PYTHONUTF8 = "1"
-          $env:PYTHONIOENCODING = "utf-8"
-          Write-Host "Encoding set to UTF-8"
-
       - name: Install pywinrm
-        shell: powershell
-        run: |
-          chcp 65001
-          $env:PYTHONUTF8 = "1"
-          & "$env:PYTHON_EXE" -m pip install pywinrm requests-ntlm --quiet
-          & "$env:PYTHON_EXE" -c "import winrm; print('pywinrm OK')"
-
-      - name: Verify Ansible version
         shell: cmd
         run: |
           chcp 65001
           set PYTHONUTF8=1
-          set PYTHONIOENCODING=utf-8
-          "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe" -X utf8 -m ansible --version
+          "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe" -m pip install pywinrm requests-ntlm --quiet
+          "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe" -c "import winrm; print('pywinrm OK')"
 
       - name: Create inventory and ansible.cfg
         shell: powershell
@@ -95,7 +76,7 @@ jobs:
           set PYTHONUTF8=1
           set PYTHONIOENCODING=utf-8
           cd ansible
-          "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe" -X utf8 -m ansible windows_servers -i inventory-local.ini -m win_ping -v
+          "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe" -X utf8 -m ansible adhoc -i inventory-local.ini windows_servers -m win_ping -v
 
       - name: Deploy via Ansible
         shell: cmd
@@ -104,7 +85,7 @@ jobs:
           set PYTHONUTF8=1
           set PYTHONIOENCODING=utf-8
           cd ansible
-          "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe" -X utf8 -m ansible-playbook -i inventory-local.ini deploy.yml --extra-vars "war_src=../target/sample-webapp.war" -v
+          "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe" -X utf8 -m ansible playbook -i inventory-local.ini deploy.yml --extra-vars "war_src=../target/sample-webapp.war" -v
 
       - name: Verify app
         shell: powershell
