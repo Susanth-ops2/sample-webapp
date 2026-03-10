@@ -45,7 +45,7 @@ jobs:
           name: sample-webapp-war
           path: target/
 
-      - name: Find Python and install packages
+      - name: Install Ansible and pywinrm
         shell: powershell
         run: |
           $python = "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe"
@@ -53,10 +53,28 @@ jobs:
             $python = (Get-Command python -ErrorAction SilentlyContinue).Source
           }
           Write-Host "Using Python: $python"
-          "PYTHON_EXE=$python" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+          # Scripts folder is where ansible.exe will be created
+          $scripts = Split-Path $python | Join-Path -ChildPath "Scripts"
+          Write-Host "Scripts folder: $scripts"
+
+          # Install packages
           & $python -m pip install --upgrade pip
           & $python -m pip install ansible pywinrm requests-ntlm
+
+          # Verify ansible.exe exists
+          $ansibleExe = Join-Path $scripts "ansible.exe"
+          $ansiblePlaybookExe = Join-Path $scripts "ansible-playbook.exe"
+          Write-Host "ansible.exe exists: $(Test-Path $ansibleExe)"
+          Write-Host "ansible-playbook.exe exists: $(Test-Path $ansiblePlaybookExe)"
+
+          # Verify pywinrm
           & $python -c "import winrm; print('pywinrm OK')"
+
+          # Save paths to env for next steps
+          "PYTHON_EXE=$python" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "ANSIBLE_EXE=$ansibleExe" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "ANSIBLE_PLAYBOOK_EXE=$ansiblePlaybookExe" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Create inventory and ansible.cfg
         shell: powershell
@@ -75,13 +93,13 @@ jobs:
         shell: powershell
         run: |
           cd ansible
-          & $env:PYTHON_EXE -m ansible windows_servers -i inventory-local.ini -m win_ping -v
+          & $env:ANSIBLE_EXE windows_servers -i inventory-local.ini -m win_ping -v
 
       - name: Deploy via Ansible
         shell: powershell
         run: |
           cd ansible
-          & $env:PYTHON_EXE -m ansible-playbook -i inventory-local.ini deploy.yml --extra-vars "war_src=../target/sample-webapp.war" -v
+          & $env:ANSIBLE_PLAYBOOK_EXE -i inventory-local.ini deploy.yml --extra-vars "war_src=../target/sample-webapp.war" -v
 
       - name: Verify app
         shell: powershell
