@@ -18,11 +18,8 @@ jobs:
         shell: powershell
         run: |
           $mvn = "C:\Users\ssusanthakumar\apache-maven-3.9.12\bin\mvn.cmd"
-          if (Test-Path $mvn) {
-            & $mvn clean package -DskipTests=false
-          } else {
-            mvn clean package -DskipTests=false
-          }
+          if (Test-Path $mvn) { & $mvn clean package -DskipTests=false }
+          else { mvn clean package -DskipTests=false }
 
       - name: Upload WAR artifact
         uses: actions/upload-artifact@v4
@@ -51,8 +48,10 @@ jobs:
           WINDOWS_USER: ${{ secrets.WINDOWS_USER }}
           WINDOWS_PASSWORD: ${{ secrets.WINDOWS_PASSWORD }}
         run: |
-          $hostIP = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notlike "*Loopback*" -and $_.InterfaceAlias -notlike "*docker*" -and $_.InterfaceAlias -notlike "*vEthernet*" } | Select-Object -First 1).IPAddress
-          Write-Host "Host IP: $hostIP"
+          # Docker gateway IP - how Docker container reaches Windows host
+          $hostIP = "172.17.0.1"
+          Write-Host "Using Docker gateway IP: $hostIP"
+
           $lines = @(
             "[windows_servers]",
             "your-pc ansible_host=$hostIP",
@@ -64,29 +63,59 @@ jobs:
             "ansible_winrm_transport=basic",
             "ansible_winrm_port=5985",
             "ansible_winrm_scheme=http",
-            "ansible_winrm_server_cert_validation=ignore"
+            "ansible_winrm_server_cert_validation=ignore",
+            "ansible_winrm_operation_timeout_sec=60",
+            "ansible_winrm_read_timeout_sec=70"
           )
-          # Write with Unix line endings (LF only) for Docker/Linux
-          $content = $lines -join "`n"
-          [System.IO.File]::WriteAllText("$PWD\ansible\inventory-local.ini", $content)
-          $cfg = "[defaults]`nhost_key_checking=False`nretry_files_enabled=False`nroles_path=roles"
-          [System.IO.File]::WriteAllText("$PWD\ansible\ansible.cfg", $cfg)
+          [System.IO.File]::WriteAllText("$PWD\ansible\inventory-local.ini", ($lines -join "`n"))
           Write-Host "Inventory:"
           Get-Content ansible\inventory-local.ini
+
+      - name: Allow WinRM from Docker network
+        shell: powershell
+        run: |
+          # Allow Docker subnet 172.17.0.0/16 through firewall
+          $ruleName = "WinRM-Docker"
+          $existing = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+          if (-not $existing) {
+            New-NetFirewallRule -DisplayName $ruleName `
+              -Direction Inbound -Protocol TCP `
+              -LocalPort 5985 -RemoteAddress "172.17.0.0/16" `
+              -Action Allow
+            Write-Host "Firewall rule added for Docker subnet"
+          } else {
+            Write-Host "Firewall rule already exists"
+          }
+          # Verify WinRM listening
+          netstat -an | findstr "5985"
 
       - name: Test WinRM ping via Ansible in Docker
         shell: powershell
         run: |
           $ansiblePath = (Resolve-Path "ansible").Path
-          $targetPath = (Resolve-Path "target").Path
-          docker run --rm -v "${ansiblePath}:/ansible" -v "${targetPath}:/target" -w /ansible cytopia/ansible:latest-tools sh -c "pip install pywinrm requests-ntlm -q && ansible windows_servers -i inventory-local.ini -m win_ping -v"
+          $targetPath  = (Resolve-Path "target").Path
+          docker run --rm `
+            -v "${ansiblePath}:/ansible" `
+            -v "${targetPath}:/target" `
+            -w /ansible `
+            -e ANSIBLE_HOST_KEY_CHECKING=False `
+            -e ANSIBLE_RETRY_FILES_ENABLED=False `
+            cytopia/ansible:latest-tools `
+            sh -c "pip install pywinrm requests-ntlm -q && ansible windows_servers -i inventory-local.ini -m win_ping -v"
 
       - name: Deploy WAR via Ansible in Docker
         shell: powershell
         run: |
           $ansiblePath = (Resolve-Path "ansible").Path
-          $targetPath = (Resolve-Path "target").Path
-          docker run --rm -v "${ansiblePath}:/ansible" -v "${targetPath}:/target" -w /ansible cytopia/ansible:latest-tools sh -c "pip install pywinrm requests-ntlm -q && ansible-playbook -i inventory-local.ini deploy.yml --extra-vars 'war_src=/target/sample-webapp.war' -v"
+          $targetPath  = (Resolve-Path "target").Path
+          docker run --rm `
+            -v "${ansiblePath}:/ansible" `
+            -v "${targetPath}:/target" `
+            -w /ansible `
+            -e ANSIBLE_HOST_KEY_CHECKING=False `
+            -e ANSIBLE_RETRY_FILES_ENABLED=False `
+            cytopia/ansible:latest-tools `
+            sh -c "pip install pywinrm requests-ntlm -q && ansible-playbook -i inventory-local.ini deploy.yml --extra-vars 'war_src=/target/sample-webapp.war' -v"
 
       - name: Verify app is running
         shell: powershell
