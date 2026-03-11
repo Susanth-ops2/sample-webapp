@@ -9,17 +9,17 @@
 
   vars:
     java_version: "11"
-    java_install_dir: 'C:\Java\jdk-11'
+    java_install_dir: 'C:/Java/jdk-11'
     tomcat_version: "10.1.13"
-    tomcat_install_dir: 'C:\Tomcat'
+    tomcat_install_dir: 'C:/Tomcat'
     tomcat_port: 8080
     tomcat_service_name: "Tomcat10"
     app_name: "sample-webapp"
     app_version: "1.0.0"
     app_environment: "staging"
-    app_config_dir: 'C:\Tomcat\conf\sample-webapp'
-    war_dest: 'C:\Tomcat\webapps\sample-webapp.war'
-    log_dir: 'C:\Tomcat\logs'
+    app_config_dir: 'C:/Tomcat/conf/sample-webapp'
+    war_dest: 'C:/Tomcat/webapps/sample-webapp.war'
+    log_dir: 'C:/Tomcat/logs'
     jvm_xms: "256M"
     jvm_xmx: "512M"
     db_host: "localhost"

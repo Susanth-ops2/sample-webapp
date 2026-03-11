@@ -12,26 +12,26 @@
 
 - name: Create app log directory
   win_file:
-    path: "{{ log_dir }}\\{{ app_name }}"
+    path: "{{ log_dir }}/{{ app_name }}"
     state: directory
 
 # ── Step 2: Render J2 Templates → Config Files ───────────────
 - name: "[J2] Render application.properties from template"
   template:
     src: application.properties.j2
-    dest: "{{ app_config_dir }}\\application.properties"
+    dest: "{{ app_config_dir }}/application.properties"
   notify: Restart Tomcat service
 
 - name: "[J2] Render log4j2.properties from template"
   template:
     src: log4j2.properties.j2
-    dest: "{{ app_config_dir }}\\log4j2.properties"
+    dest: "{{ app_config_dir }}/log4j2.properties"
   notify: Restart Tomcat service
 
 - name: "[J2] Render deploy-report HTML from template"
   template:
     src: deploy-report.html.j2
-    dest: "{{ tomcat_install_dir }}\\webapps\\ROOT\\deploy-status.html"
+    dest: "{{ tomcat_install_dir }}/webapps/ROOT/deploy-status.html"
 
 # ── Step 3: Stop Tomcat Windows Service ──────────────────────
 - name: Stop Tomcat Windows service
@@ -49,28 +49,28 @@
 # ── Step 4: Remove old WAR and exploded app ───────────────────
 - name: Remove old WAR file
   win_file:
-    path: "{{ tomcat_install_dir }}\\webapps\\{{ app_name }}.war"
+    path: "{{ tomcat_install_dir }}/webapps/{{ app_name }}.war"
     state: absent
 
 - name: Remove old exploded app directory
   win_file:
-    path: "{{ tomcat_install_dir }}\\webapps\\{{ app_name }}"
+    path: "{{ tomcat_install_dir }}/webapps/{{ app_name }}"
     state: absent
 
 # ── Step 5: Deploy new WAR ───────────────────────────────────
 - name: Copy new WAR file to Tomcat webapps
   win_copy:
     src: "{{ war_src }}"
-    dest: "{{ tomcat_install_dir }}\\webapps\\{{ app_name }}.war"
+    dest: "{{ tomcat_install_dir }}/webapps/{{ app_name }}.war"
 
 - name: Confirm WAR file exists
   win_stat:
-    path: "{{ tomcat_install_dir }}\\webapps\\{{ app_name }}.war"
+    path: "{{ tomcat_install_dir }}/webapps/{{ app_name }}.war"
   register: war_stat
 
 - name: Show WAR file details
   debug:
-    msg: "WAR deployed: {{ tomcat_install_dir }}\\webapps\\{{ app_name }}.war | Size: {{ war_stat.stat.size }} bytes"
+    msg: "WAR deployed: {{ tomcat_install_dir }}/webapps/{{ app_name }}.war | Size: {{ war_stat.stat.size }} bytes"
 
 # ── Step 6: Start Tomcat Windows Service ─────────────────────
 - name: Start Tomcat Windows service

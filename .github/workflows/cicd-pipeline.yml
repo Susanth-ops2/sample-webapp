@@ -14,15 +14,15 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Set up Java 11
-        uses: actions/setup-java@v4
-        with:
-          java-version: '11'
-          distribution: 'temurin'
-          cache: maven
-
       - name: Build with Maven
-        run: mvn clean package -DskipTests=false
+        shell: powershell
+        run: |
+          $mvn = "C:\Users\ssusanthakumar\apache-maven-3.9.12\bin\mvn.cmd"
+          if (Test-Path $mvn) {
+            & $mvn clean package -DskipTests=false
+          } else {
+            mvn clean package -DskipTests=false
+          }
 
       - name: Upload WAR artifact
         uses: actions/upload-artifact@v4
@@ -52,9 +52,25 @@ jobs:
           WINDOWS_PASSWORD: ${{ secrets.WINDOWS_PASSWORD }}
         run: |
           $hostIP = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notlike "*Loopback*" -and $_.InterfaceAlias -notlike "*docker*" -and $_.InterfaceAlias -notlike "*vEthernet*" } | Select-Object -First 1).IPAddress
-          Write-Host "Host IP for Docker: $hostIP"
-          Set-Content -Path ansible\inventory-local.ini -Value "[windows_servers]`nyour-pc ansible_host=$hostIP`n`n[windows_servers:vars]`nansible_user=$env:WINDOWS_USER`nansible_password=$env:WINDOWS_PASSWORD`nansible_connection=winrm`nansible_winrm_transport=basic`nansible_winrm_port=5985`nansible_winrm_scheme=http`nansible_winrm_server_cert_validation=ignore" -Encoding utf8
-          Set-Content -Path ansible\ansible.cfg -Value "[defaults]`nhost_key_checking=False`nretry_files_enabled=False`nroles_path=roles" -Encoding utf8
+          Write-Host "Host IP: $hostIP"
+          $lines = @(
+            "[windows_servers]",
+            "your-pc ansible_host=$hostIP",
+            "",
+            "[windows_servers:vars]",
+            "ansible_user=$env:WINDOWS_USER",
+            "ansible_password=$env:WINDOWS_PASSWORD",
+            "ansible_connection=winrm",
+            "ansible_winrm_transport=basic",
+            "ansible_winrm_port=5985",
+            "ansible_winrm_scheme=http",
+            "ansible_winrm_server_cert_validation=ignore"
+          )
+          # Write with Unix line endings (LF only) for Docker/Linux
+          $content = $lines -join "`n"
+          [System.IO.File]::WriteAllText("$PWD\ansible\inventory-local.ini", $content)
+          $cfg = "[defaults]`nhost_key_checking=False`nretry_files_enabled=False`nroles_path=roles"
+          [System.IO.File]::WriteAllText("$PWD\ansible\ansible.cfg", $cfg)
           Write-Host "Inventory:"
           Get-Content ansible\inventory-local.ini
 

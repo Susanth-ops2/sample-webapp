@@ -15,16 +15,16 @@ ansible_winrm_server_cert_validation: ignore
 app_name: "sample-webapp"
 app_version: "1.0.0"
 app_environment: "staging"
-app_config_dir: 'C:\Tomcat\conf\sample-webapp'
+app_config_dir: 'C:/Tomcat\conf\sample-webapp'
 
 # ── Java ─────────────────────────────────────────────────────
 java_version: "11"
-java_install_dir: 'C:\Java\jdk-11'
-java_home: 'C:\Java\jdk-11'
+java_install_dir: 'C:/Java\jdk-11'
+java_home: 'C:/Java\jdk-11'
 
 # ── Tomcat ───────────────────────────────────────────────────
 tomcat_version: "10.1.13"
-tomcat_install_dir: 'C:\Tomcat'
+tomcat_install_dir: 'C:/Tomcat'
 tomcat_port: 8080
 tomcat_shutdown_port: 8005
 tomcat_service_name: "Tomcat10"
@@ -45,7 +45,7 @@ db_password: "StagePass@2024"
 
 # ── Logging ──────────────────────────────────────────────────
 log_level: "DEBUG"
-log_dir: 'C:\Tomcat\logs'
+log_dir: 'C:/Tomcat\logs'
 log_max_size: "10MB"
 log_max_backups: 5
 
