@@ -32,7 +32,7 @@ jobs:
           retention-days: 5
 
   deploy-localhost:
-    name: Deploy to Localhost
+    name: Deploy via Ansible in Docker
     runs-on: self-hosted
     needs: build
     steps:
@@ -45,85 +45,43 @@ jobs:
           name: sample-webapp-war
           path: target/
 
-      - name: Install pywinrm and create ansible wrapper
-        shell: powershell
-        run: |
-          $python = "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe"
-
-          # Install pywinrm
-          & $python -m pip install pywinrm requests-ntlm --quiet
-          & $python -c "import winrm; print('pywinrm OK')"
-
-          # Create ansible wrapper script that forces UTF-8
-          $wrapper = @'
-          import sys
-          import os
-          os.environ['PYTHONUTF8'] = '1'
-          os.environ['PYTHONIOENCODING'] = 'utf-8'
-          if hasattr(sys.stdout, 'reconfigure'):
-              sys.stdout.reconfigure(encoding='utf-8')
-          if hasattr(sys.stderr, 'reconfigure'):
-              sys.stderr.reconfigure(encoding='utf-8')
-          '@
-
-          # Create ansible_ping.py wrapper
-          $ping_wrapper = $wrapper + "`nfrom ansible.cli.adhoc import main`nsys.argv = ['ansible', 'windows_servers', '-i', 'inventory-local.ini', '-m', 'win_ping', '-v']`nmain()`n"
-          $ping_wrapper | Out-File -FilePath ansible\run_ping.py -Encoding utf8
-
-          # Create ansible_deploy.py wrapper
-          $deploy_wrapper = $wrapper + "`nfrom ansible.cli.playbook import main`nimport sys`n"
-          $deploy_wrapper | Out-File -FilePath ansible\run_deploy.py -Encoding utf8
-
-          Write-Host "Wrapper scripts created"
-
-      - name: Create inventory and ansible.cfg
+      - name: Create inventory file
         shell: powershell
         env:
           WINDOWS_USER: ${{ secrets.WINDOWS_USER }}
           WINDOWS_PASSWORD: ${{ secrets.WINDOWS_PASSWORD }}
         run: |
-          $python = "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe"
-          $inv = "[windows_servers]`nyour-pc ansible_host=127.0.0.1`n`n[windows_servers:vars]`nansible_user=$env:WINDOWS_USER`nansible_password=$env:WINDOWS_PASSWORD`nansible_connection=winrm`nansible_winrm_transport=basic`nansible_winrm_port=5985`nansible_winrm_scheme=http`nansible_winrm_server_cert_validation=ignore`nansible_python_interpreter=$python"
-          $inv | Out-File -FilePath ansible\inventory-local.ini -Encoding utf8
-          $cfg = "[defaults]`nhost_key_checking=False`nretry_files_enabled=False`nroles_path=roles"
-          $cfg | Out-File -FilePath ansible\ansible.cfg -Encoding utf8
+          $hostIP = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notlike "*Loopback*" -and $_.InterfaceAlias -notlike "*docker*" -and $_.InterfaceAlias -notlike "*vEthernet*" } | Select-Object -First 1).IPAddress
+          Write-Host "Host IP for Docker: $hostIP"
+          Set-Content -Path ansible\inventory-local.ini -Value "[windows_servers]`nyour-pc ansible_host=$hostIP`n`n[windows_servers:vars]`nansible_user=$env:WINDOWS_USER`nansible_password=$env:WINDOWS_PASSWORD`nansible_connection=winrm`nansible_winrm_transport=basic`nansible_winrm_port=5985`nansible_winrm_scheme=http`nansible_winrm_server_cert_validation=ignore" -Encoding utf8
+          Set-Content -Path ansible\ansible.cfg -Value "[defaults]`nhost_key_checking=False`nretry_files_enabled=False`nroles_path=roles" -Encoding utf8
           Write-Host "Inventory:"
           Get-Content ansible\inventory-local.ini
 
-      - name: Test WinRM ping localhost
+      - name: Test WinRM ping via Ansible in Docker
         shell: powershell
         run: |
-          $python = "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe"
-          cd ansible
-          & $python -X utf8 run_ping.py
+          $ansiblePath = (Resolve-Path "ansible").Path
+          $targetPath = (Resolve-Path "target").Path
+          docker run --rm -v "${ansiblePath}:/ansible" -v "${targetPath}:/target" -w /ansible cytopia/ansible:latest-tools sh -c "pip install pywinrm requests-ntlm -q && ansible windows_servers -i inventory-local.ini -m win_ping -v"
 
-      - name: Deploy via Ansible
+      - name: Deploy WAR via Ansible in Docker
         shell: powershell
         run: |
-          $python = "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\python.exe"
-          $playbook = "C:\Users\ssusanthakumar\AppData\Local\Programs\Python\Python313\Scripts\ansible-playbook.exe"
-          cd ansible
-          $env:PYTHONUTF8 = "1"
-          $env:PYTHONIOENCODING = "utf-8"
-          # Use ansible-playbook.exe directly with UTF8 env vars set
-          & $python -X utf8 -c "
-          import sys, os
-          os.environ['PYTHONUTF8']='1'
-          os.environ['PYTHONIOENCODING']='utf-8'
-          sys.argv = ['ansible-playbook', '-i', 'inventory-local.ini', 'deploy.yml', '--extra-vars', 'war_src=../target/sample-webapp.war', '-v']
-          from ansible.cli.playbook import main
-          main()
-          "
+          $ansiblePath = (Resolve-Path "ansible").Path
+          $targetPath = (Resolve-Path "target").Path
+          docker run --rm -v "${ansiblePath}:/ansible" -v "${targetPath}:/target" -w /ansible cytopia/ansible:latest-tools sh -c "pip install pywinrm requests-ntlm -q && ansible-playbook -i inventory-local.ini deploy.yml --extra-vars 'war_src=/target/sample-webapp.war' -v"
 
-      - name: Verify app
+      - name: Verify app is running
         shell: powershell
         run: |
           Start-Sleep -Seconds 15
           try {
             $r = Invoke-WebRequest -Uri "http://127.0.0.1:8080/sample-webapp/" -UseBasicParsing
-            Write-Host "SUCCESS - HTTP Status: $($r.StatusCode)"
+            Write-Host "SUCCESS! HTTP Status: $($r.StatusCode)"
+            Write-Host "App live at: http://localhost:8080/sample-webapp/"
           } catch {
-            Write-Host "Check manually at http://localhost:8080/sample-webapp/"
+            Write-Host "Check manually: http://localhost:8080/sample-webapp/"
           }
 
   summary:
